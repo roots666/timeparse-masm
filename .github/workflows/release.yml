@@ -79,11 +79,9 @@ jobs:
           ls -lh .
 
       - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            "release/timeparse.exe" \
-            "release/timeparse.exe.sha256" \
-            --title "${GITHUB_REF_NAME}" \
-            --notes-file "release/RELEASE_NOTES.txt"
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: release/RELEASE_NOTES.txt
+          files: |
+            release/timeparse.exe
+            release/timeparse.exe.sha256
