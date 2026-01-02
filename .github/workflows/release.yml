@@ -1,0 +1,89 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-win64:
+    name: Build win64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # MSVC tools (cl, link) and MASM (ml64) are available on the runner, but you
+      # must initialize the compiler environment variables (same idea as opening
+      # the "x64 Native Tools Command Prompt").
+      - name: Set up MSVC dev cmd (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          ml64 /nologo /c /Fo build\convert_time.obj src\convert_time.asm
+          cl /nologo /W4 /TC /O2 /I include /c /Fo:build\main.obj src\main.c
+          link /nologo /SUBSYSTEM:CONSOLE /OUT:build\timeparse.exe build\main.obj build\convert_time.obj
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          .\build\timeparse.exe
+
+      - name: Upload win64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: timeparse-win64-${{ github.sha }}
+          path: build\timeparse.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Release
+    needs: [build-win64]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download win64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: timeparse-win64-${{ github.sha }}
+          path: release
+
+      - name: Prepare release assets
+        run: |
+          cd release
+          sha256sum timeparse.exe > timeparse.exe.sha256
+
+          cat > RELEASE_NOTES.txt <<EOF
+          Release: ${GITHUB_REF_NAME}
+          Commit: ${GITHUB_SHA}
+          Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+          Asset:
+          - timeparse.exe (Windows x86-64)
+          EOF
+
+          ls -lh .
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "release/timeparse.exe" \
+            "release/timeparse.exe.sha256" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file "release/RELEASE_NOTES.txt"

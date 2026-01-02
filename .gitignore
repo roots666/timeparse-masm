@@ -1,0 +1,9 @@
+# build outputs
+/build/
+*.obj
+*.exe
+*.pdb
+*.ilk
+
+# editor
+.vscode/
